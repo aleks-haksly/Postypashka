@@ -1,3 +1,23 @@
+/*
+При конфликте портов docker:
+
+net stop winnat
+docker start container_name
+net start winna
+
+Свойства таблицы:
+
+DESCRIBE FORMATTED transactions;
+*/
+
+
+
+/*Задачи:
+Создайте две таблицы: transactions и customers.
+Таблица transactions должна содержать следующие поля: transaction_id (INT), customer_id (INT), transaction_date (STRING), amount (DOUBLE).
+Таблица customers должна содержать поля: customer_id (INT), name (STRING), age (INT), country (STRING).
+Разбейте таблицу transactions на разделы по столбцу transaction_date и кластеризуйте по customer_id (3 бакета).
+Разбейте таблицу customers на разделы по столбцу country и кластеризуйте по customer_id (3 бакета).
 
 INSERT INTO TABLE transactions PARTITION (transaction_date) 
 VALUES 
@@ -15,49 +35,7 @@ VALUES
 (104, 'Emily Davis', 60, 'UK'),
 (105, 'Alex Green', 29, 'Canada');
 
-INSERT INTO TABLE external_transactions PARTITION (transaction_date)
-VALUES 
-(6, 105, '2024-01-11', 100.25),
-(7, 106, '2024-02-15', 220.00),
-(8, 101, '2024-03-05', 310.45);
-
-/*Задачи:
-Создание таблиц с разбиением на разделы и кластеризацией:
-
-Создайте две таблицы: transactions и customers.
-Таблица transactions должна содержать следующие поля: transaction_id (INT), customer_id (INT), transaction_date (STRING), amount (DOUBLE).
-Таблица customers должна содержать поля: customer_id (INT), name (STRING), age (INT), country (STRING).
-Разбейте таблицу transactions на разделы по столбцу transaction_date и кластеризуйте по customer_id (3 бакета).
-Разбейте таблицу customers на разделы по столбцу country и кластеризуйте по customer_id (3 бакета).
-Работа с внешней таблицей:
-
-Создайте внешнюю таблицу external_transactions, указывая местоположение в HDFS (или локальной файловой системе), которое ссылается на ваши данные о транзакциях.
-Вставьте несколько строк данных в созданную внешнюю таблицу.
-Использование виртуальных полей:
-
-Напишите запрос, который добавляет виртуальное поле tax в таблицу transactions, где налог составляет 15% от суммы транзакции.
-Напишите запрос, который выводит список всех клиентов, добавляя виртуальное поле customer_status, которое принимает значение VIP, если клиенту более 50 лет, иначе — Regular.
-Map Join и Insert Overwrite:
-
-Напишите запрос для объединения таблиц transactions и customers, используя Map Join. Получите список транзакций вместе с именами клиентов.
-Результат объединения вставьте в новую таблицу transactions_with_customers с помощью INSERT OVERWRITE.
-Работа с агрегацией и виртуальными полями:
-
-Напишите запрос, который вычисляет общую сумму транзакций за каждый месяц, используя виртуальные поля для извлечения года и месяца из transaction_date.
-Дополнительное задание (по желанию):
-Создайте запрос, который использует встроенные виртуальные поля INPUT__FILE__NAME и выводит имя файла для каждой транзакции в таблице external_transactions.*/
-
-
-ALTER TABLE $tablename SET TBLPROPERTIES('EXTERNAL'='False');
-DROP TABLE $tablename
-
-
-net stop winnat
-docker start container_name
-net start winnat
-
-
-
+*/
 CREATE TABLE transactions (
   transaction_id INT,
   customer_id INT,
@@ -101,7 +79,17 @@ VALUES
 (105, 'Alex Green', 29, 'Canada');
 
 
-DESCRIBE FORMATTED transactions;
+
+/*Задачи:
+Создайте внешнюю таблицу external_transactions, указывая местоположение в HDFS (или локальной файловой системе), которое ссылается на ваши данные о транзакциях.
+Вставьте несколько строк данных в созданную внешнюю таблицу.
+
+INSERT INTO TABLE external_transactions PARTITION (transaction_date)
+VALUES 
+(6, 105, '2024-01-11', 100.25),
+(7, 106, '2024-02-15', 220.00),
+(8, 101, '2024-03-05', 310.45);
+*/
 
 CREATE EXTERNAL TABLE external_transactions (
   transaction_id INT,
@@ -121,9 +109,44 @@ VALUES
 (7, 106,  220.00, '2024-02-15'),
 (8, 101,  310.45, '2024-03-05');
 
-
+--Напишите запрос, который добавляет виртуальное поле tax в таблицу transactions, где налог составляет 15% от суммы транзакции.
 SELECT t.transaction_id, t.customer_id, t.amount, t.transaction_date, t.amount * 0.15 as tax FROM  transactions t ;
 
 
-
+--Напишите запрос, который выводит список всех клиентов, добавляя виртуальное поле customer_status, которое принимает значение VIP, если клиенту более 50 лет, иначе — Regular.
 SELECT *, (CASE WHEN c.age > 50 THEN 'VIP' ELSE 'Regular' END) as customer_status FROM customers c 
+
+/*
+Map Join и Insert Overwrite:
+
+Напишите запрос для объединения таблиц transactions и customers, используя Map Join. Получите список транзакций вместе с именами клиентов.
+Результат объединения вставьте в новую таблицу transactions_with_customers с помощью INSERT OVERWRITE.
+
+*/
+CREATE TABLE transactions_with_customers (
+  customer_id INT,
+  name STRING,
+  transaction_id INT,
+  amount DOUBLE
+)
+PARTITIONED BY (transaction_date STRING)
+CLUSTERED BY (customer_id) INTO 3 BUCKETS
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+SET hive.auto.convert.join = True;
+SET hive.exec.dynamic.partition=true;
+SET hive.exec.dynamic.partition.mode=nonstrict;
+INSERT OVERWRITE TABLE transactions_with_customers PARTITION(transaction_date)
+SELECT /*+MAPJOIN(customers)*/c.customer_id, c.name, t.transaction_id, t.amount, t.transaction_date
+FROM customers c
+LEFT JOIN transactions t ON c.customer_id = t.customer_id;
+
+
+/*
+Работа с агрегацией и виртуальными полями:
+
+Напишите запрос, который вычисляет общую сумму транзакций за каждый месяц, используя виртуальные поля для извлечения года и месяца из transaction_date.
+Дополнительное задание (по желанию):
+Создайте запрос, который использует встроенные виртуальные поля INPUT__FILE__NAME и выводит имя файла для каждой транзакции в таблице external_transactions.*/
