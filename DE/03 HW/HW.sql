@@ -148,5 +148,26 @@ LEFT JOIN transactions t ON c.customer_id = t.customer_id;
 Работа с агрегацией и виртуальными полями:
 
 Напишите запрос, который вычисляет общую сумму транзакций за каждый месяц, используя виртуальные поля для извлечения года и месяца из transaction_date.
+*/
+SELECT 
+	YEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(transaction_date, 'yyyy-MM-dd'))) as transaction_date_year,
+	MONTH(FROM_UNIXTIME(UNIX_TIMESTAMP(transaction_date, 'yyyy-MM-dd'))) as transaction_date_month,
+	SUM(amount) as transaction_sum
+FROM transactions t
+GROUP BY YEAR(FROM_UNIXTIME(UNIX_TIMESTAMP(transaction_date, 'yyyy-MM-dd'))), MONTH(FROM_UNIXTIME(UNIX_TIMESTAMP(transaction_date, 'yyyy-MM-dd')))
+
+SELECT 
+	SUBSTR(transaction_date, 1, 7) AS year_month,
+	SUM(amount) as transaction_sum
+FROM transactions t
+GROUP BY SUBSTR(transaction_date, 1, 7)
+
+
+/*
 Дополнительное задание (по желанию):
 Создайте запрос, который использует встроенные виртуальные поля INPUT__FILE__NAME и выводит имя файла для каждой транзакции в таблице external_transactions.*/
+
+SELECT 
+transaction_id, 
+INPUT__FILE__NAME as file_name
+FROM external_transactions
